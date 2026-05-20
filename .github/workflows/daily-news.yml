@@ -1,0 +1,29 @@
+name: 每日新闻推送
+
+on:
+  schedule:
+    # UTC 23:30 = 北京时间 7:30
+    - cron: "30 23 * * *"
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  send-news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: node src/index.js
+        env:
+          QQ_EMAIL: ${{ secrets.QQ_EMAIL }}
+          QQ_SMTP_CODE: ${{ secrets.QQ_SMTP_CODE }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          TO_EMAIL: ${{ secrets.TO_EMAIL }}
