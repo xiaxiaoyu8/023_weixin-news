@@ -28,7 +28,7 @@ function buildHtml(markdownBody) {
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#fff;">
   <tr>
     <td style="padding:24px 20px 12px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;text-align:center;border-radius:0 0 12px 12px;">
-    <h1 style="margin:0;font-size:18px;opacity:0.95;">${date} 简报新鲜出炉!</h1>
+    <h1 style="margin:0;font-size:18px;opacity:0.95;">早安，简报新鲜出炉!</h1>
     </td>
   </tr>
   <tr>
