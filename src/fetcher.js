@@ -1,4 +1,5 @@
 const RssParser = require("rss-parser");
+const { toSimplified } = require("./chinese");
 
 const parser = new RssParser({
   timeout: 15000,
@@ -28,12 +29,12 @@ async function fetchFeed(feed) {
     const items = (result.items || [])
       .filter((item) => isWithin24h(item.pubDate || item.isoDate))
       .map((item) => ({
-        title: (item.title || "").trim(),
+        title: toSimplified((item.title || "").trim()),
         link: item.link || "",
-        summary: (item.contentSnippet || item.summary || "").trim().slice(0, 200),
+        summary: toSimplified((item.contentSnippet || item.summary || "").trim()).slice(0, 200),
         pubDate: item.pubDate || item.isoDate || "",
-        sourceName: feed.name,
-        category: feed.category,
+        sourceName: toSimplified(feed.name),
+        category: toSimplified(feed.category),
       }));
     console.log(`  [${feed.name}] ${items.length} 条`);
     return items;

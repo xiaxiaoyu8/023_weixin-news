@@ -1,6 +1,7 @@
 const OpenAI = require("openai");
+const { toSimplified } = require("./chinese");
 
-const SYSTEM_PROMPT = `你是一位资深新闻编辑。用户会给你若干条今日新闻（标题+摘要+来源+链接），请完成：
+const SYSTEM_PROMPT = `你是一位资深新闻编辑。用户会给你若干条今日新闻（标题+摘要+来源+链接）。全部输出必须使用简体中文；如果输入标题或摘要包含繁体字，先转换为简体中文后再输出。
 
 1. 按「🌍 国际」「🇨🇳 国内」「💻 科技」「📈 财经」四类归类
 2. 为每条新闻写一行摘要（30字以内），保留链接
@@ -43,7 +44,7 @@ async function summarizeNews(newsList) {
     max_tokens: 4096,
   });
 
-  const content = resp.choices[0]?.message?.content || "";
+  const content = toSimplified(resp.choices[0]?.message?.content || "");
   console.log(`✅ AI 处理完成（${content.length} 字符）\n`);
   return content;
 }

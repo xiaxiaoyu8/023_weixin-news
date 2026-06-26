@@ -24,7 +24,7 @@ async function main() {
     const html = buildHtml(markdown);
 
     await sendEmail({
-      subject: `📰 每日新闻简报 · ${dateStr}`,
+      subject: `${dateStr}新闻简报`,
       html,
     });
 
