@@ -2,8 +2,8 @@ name: 每日新闻推送
 
 on:
   schedule:
-    # UTC 23:30 = 北京时间 7:30
-    - cron: "30 23 * * *"
+    # UTC 21:30 = 北京时间 5:30
+    - cron: "30 21 * * *"
   workflow_dispatch: # 允许手动触发
 
 jobs:
