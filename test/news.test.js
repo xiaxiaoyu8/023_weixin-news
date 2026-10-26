@@ -18,7 +18,7 @@ const article = {
   link: "https://example.com/news",
   pubDate: now.toISOString(),
 };
-const brief = "## 📌 两日要闻速览\n> 过去两天的重要进展。\n\n## 💻 科技（1条）\n- **测试新闻**：这是一条新闻摘要 — [阅读原文](https://example.com/news) `测试来源`";
+const brief = "# 科技冒个泡\n\n## 📌 要闻速览\n> 过去两天的重要进展。\n\n## 💻 科技（1条）\n- **测试新闻**：这是一条新闻摘要 — [阅读原文](https://example.com/news) `测试来源`";
 
 function loadSource(name, mocks = {}, globals = {}) {
   const filename = path.join(root, "src", name);
@@ -110,6 +110,8 @@ test("生成请求使用当前模型、非思考模式和同一北京时间窗�
   assert.equal(endpoint, "https://api.deepseek.com/v1/chat/completions");
   assert.equal(request.model, "deepseek-flash");
   assert.equal(request.thinking.type, "disabled");
+  assert.match(request.messages[0].content, /根据本期新闻的主要话题自由联想/);
+  assert.match(request.messages[0].content, /只含1-6个汉字/);
   assert.match(request.messages[1].content, /2026\/10\/24 05:30:00 至 2026\/10\/26 05:30:00/);
   assert.match(request.messages[1].content, /发布时间：2026\/10\/26 05:30:00/);
 });
@@ -120,7 +122,7 @@ for (const [label, response, expected] of [
   ["内容被过滤", { choices: [{ finish_reason: "content_filter", message: { content: null } }] }, /未完整完成/],
   ["缺少choice", { choices: [] }, /未完整完成/],
   ["缺少要闻速览", { choices: [{ finish_reason: "stop", message: { content: "## 科技\n- [原文](https://example.com)" } }] }, /缺少要闻速览/],
-  ["缺少新闻链接", { choices: [{ finish_reason: "stop", message: { content: "## 📌 两日要闻速览\n没有新闻" } }] }, /有效新闻链接/],
+  ["缺少新闻链接", { choices: [{ finish_reason: "stop", message: { content: "## 📌 要闻速览\n没有新闻" } }] }, /有效新闻链接/],
   ["包裹在代码块", { choices: [{ finish_reason: "stop", message: { content: "```markdown\n" + brief + "\n```" } }] }, /代码块/],
 ]) {
   test(`拒绝发送${label}`, async () => {
@@ -128,14 +130,58 @@ for (const [label, response, expected] of [
   });
 }
 
-test("邮件使用北京时间和48小时窗口，保留语义化标题、列表和原文链接", () => {
+test("邮件使用北京时间日期，保留语义化标题、列表和原文链接", () => {
   const html = buildHtml(brief, { now });
   assert.match(html, /2026年10月26日星期一/);
-  assert.match(html, /10月24日 05:30 — 10月26日 05:30/);
-  assert.match(html, /<h2[^>]*>📌 两日要闻速览<\/h2>/);
+  assert.match(html, /<h2[^>]*>📌 要闻速览<\/h2>/);
   assert.match(html, /<ul[^>]*>\s*<li/);
   assert.match(html, /<a href="https:\/\/example.com\/news"/);
   assert.doesNotMatch(html, /<p[^>]*>\s*<h2/);
+});
+
+test("AI标题同时用于邮件顶部和页面标题，正文不重复显示", () => {
+  const html = buildHtml(brief, { now });
+  assert.match(html, /<title>2026年10月26日星期一 · 科技冒个泡<\/title>/);
+  assert.match(html, /<h1[^>]*>科技冒个泡<\/h1>/);
+  assert.equal((html.match(/<h1\b/g) || []).length, 1);
+  assert.doesNotMatch(html, /晨间简报/);
+});
+
+test("六字标题和Windows换行可正常使用", () => {
+  const html = buildHtml(brief.replace("# 科技冒个泡", "# 世界又上新啦").replace(/\n/g, "\r\n"), { now });
+  assert.match(html, /<h1[^>]*>世界又上新啦<\/h1>/);
+  assert.equal((html.match(/<h1\b/g) || []).length, 1);
+});
+
+for (const [label, title] of [
+  ["超过六字", "今天世界又上新啦"],
+  ["沿用旧名称", "晨间简报"],
+  ["空白", " "],
+  ["表情", "科技冒泡啦☀️"],
+  ["英文", "AI冒个泡"],
+  ["HTML", '<img src=x onerror="alert(1)">'],
+]) {
+  test(`${label}标题使用备用名称且不混入新闻正文`, () => {
+    const html = buildHtml(brief.replace("# 科技冒个泡", `# ${title}`), { now });
+    assert.match(html, /<title>[^<]+ · 新闻来咯<\/title>/);
+    assert.match(html, /<h1[^>]*>新闻来咯<\/h1>/);
+    assert.equal((html.match(/<h1\b/g) || []).length, 1);
+    assert.match(html, /<h2[^>]*>📌 要闻速览<\/h2>/);
+    if (title.trim()) assert.equal(html.includes(title), false);
+  });
+}
+
+test("缺少AI标题时使用备用名称并保留完整正文", () => {
+  const html = buildHtml(brief.replace(/^# .*\n\n/, ""), { now });
+  assert.match(html, /<h1[^>]*>新闻来咯<\/h1>/);
+  assert.match(html, /<h2[^>]*>📌 要闻速览<\/h2>/);
+  assert.match(html, /<a href="https:\/\/example.com\/news"/);
+});
+
+test("只有标题标记时使用备用名称且不渲染空标题", () => {
+  const html = buildHtml(brief.replace("# 科技冒个泡", "#"), { now });
+  assert.match(html, /<h1[^>]*>新闻来咯<\/h1>/);
+  assert.equal((html.match(/<h1\b/g) || []).length, 1);
 });
 
 test("邮件转义原始HTML，禁止追踪图片和危险链接", () => {
