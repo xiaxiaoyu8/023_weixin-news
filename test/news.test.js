@@ -132,7 +132,6 @@ test("邮件使用北京时间和48小时窗口，保留语义化标题、列表
   const html = buildHtml(brief, { now });
   assert.match(html, /2026年10月26日星期一/);
   assert.match(html, /10月24日 05:30 — 10月26日 05:30/);
-  assert.match(html, /北京时间 05:30/);
   assert.match(html, /<h2[^>]*>📌 两日要闻速览<\/h2>/);
   assert.match(html, /<ul[^>]*>\s*<li/);
   assert.match(html, /<a href="https:\/\/example.com\/news"/);

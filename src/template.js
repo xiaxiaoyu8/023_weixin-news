@@ -84,7 +84,7 @@ function buildHtml(markdownBody, { now = new Date() } = {}) {
         </tr>
         <tr>
           <td style="padding:20px;border-top:1px solid #e3e9ee;background:#fafbfc;text-align:center;">
-            <p style="margin:0 0 5px;color:#536579;font-size:12px;line-height:1.8;">每天 05:30 · 最近新闻精选</p>
+            <p style="margin:0 0 5px;color:#536579;font-size:12px;line-height:1.8;">每天五点半 · 最近新闻集</p>
           </td>
         </tr>
       </table>
