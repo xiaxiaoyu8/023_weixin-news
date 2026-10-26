@@ -1,18 +1,19 @@
 # 每日新闻推送机器人
 
-一个基于 Node.js 的自动新闻简报项目。程序会抓取多个中文 RSS 新闻源，筛选近 24 小时新闻，交给 DeepSeek 生成 Markdown 简报，再转换成 HTML，通过 QQ 邮箱 SMTP 发送。
+一个基于 Node.js 的自动新闻简报项目。程序会抓取多个 RSS 新闻源，严格筛选发送时刻之前 48 小时内的新闻，交给 DeepSeek 生成简体中文简报，再转换成 HTML，通过 QQ 邮箱 SMTP 发送。
 
 项目适合放在 GitHub Actions 中定时运行，也可以在本地手动运行。
 
 ## 功能
 
-- 抓取 BBC 中文、36 氪、华尔街见闻、纽约时报中文、FT 中文网、联合早报、环球科学等 RSS 源。
-- 只保留近 24 小时新闻，并按链接和标题做简单去重。
-- 使用 DeepSeek Chat 将新闻整理为「国际、国内、科技、财经」分类简报。
+- 抓取中新网国际、国内、财经、文娱，IT之家、Solidot、爱范儿、少数派、极客公园、Dezeen 等 RSS 源，也保留 BBC 中文、纽约时报中文等国际来源。
+- 只保留近 48 小时新闻，排除无日期、无效日期、未来日期与旧闻，并按链接和标题做简单去重。
+- 使用当前 DeepSeek V4.1 Flash（API 名 `deepseek-flash`，非思考模式）将新闻整理为「国际、国内、科技、财经、文化、学术、设计」分类简报。
 - 自动将繁体内容转换为简体中文。
-- 将 Markdown 简报转换为适合邮件阅读的 HTML。
+- 生成适合桌面和手机阅读的 HTML 邮件，包含北京时间日期、明确的统计范围、要闻速览、分类新闻与原文链接。
+- 发送前检查 AI 完成状态和内容；空白、截断或格式不完整时取消发送并返回失败。
 - 通过 QQ 邮箱 SMTP 发送到指定邮箱。
-- GitHub Actions 每天北京时间 7:30 自动推送，并支持手动触发。
+- GitHub Actions 每天北京时间 05:30 定时触发，并支持手动触发；实际执行可能因平台排队延迟。
 
 ## 项目结构
 
@@ -26,7 +27,9 @@
 │   ├── index.js                      # 主入口
 │   ├── mailer.js                     # QQ 邮箱发送
 │   ├── processor.js                  # DeepSeek 新闻整理
-│   └── template.js                   # 邮件 HTML 模板
+│   ├── template.js                   # 邮件 HTML 模板
+│   └── time.js                       # 北京时间与48小时时间窗口
+├── test/news.test.js                 # 抓取、生成、邮件与失败退出测试
 ├── package.json
 └── package-lock.json
 ```
@@ -42,7 +45,7 @@
 | `DEEPSEEK_API_KEY` | DeepSeek API Key |
 | `TO_EMAIL` | 收件邮箱 |
 
-本地可以创建 `.env` 做记录，但当前代码不会自动读取 `.env` 文件。运行前需要把变量加载到GitHubAction环境变量中。
+本地可以创建 `.env` 做记录，但当前代码不会自动读取 `.env` 文件。本地运行前需要把变量加载到当前终端环境；GitHub Actions 则从仓库 Secrets 注入。
 
 PowerShell 示例：
 
@@ -76,16 +79,23 @@ npm start
 4. 转换为 HTML 邮件。
 5. 通过 QQ 邮箱 SMTP 发送。
 
+运行隔离回归测试（不会调用真实 AI API 或发送邮件）：
+
+```bash
+npm test
+```
+
+所有日期按 `Asia/Shanghai` 显示。最近两天指发送时刻向前滚动 48 小时，例如北京时间 10 月 26 日 05:30 运行时，统计 10 月 24 日 05:30 至 10 月 26 日 05:30 发布的新闻。由于每天运行一次，相邻两天的窗口会有重叠。
+
 ## GitHub Actions 自动推送
 
 工作流文件位于 `.github/workflows/daily-news.yml`。
 
 当前定时配置：
 
-GitHub Actions 使用 UTC 时间，因此该配置等于北京时间每天 7:30 运行。
-以下表示北京时间7:30
+GitHub Actions 的以下 cron 使用 UTC 时间，UTC 21:30 对应次日北京时间 05:30：
 ```yaml
-- cron: "30 23 * * *"
+- cron: "30 21 * * *"
 ```
 
 
@@ -139,12 +149,19 @@ DeepSeek API Key 无效。检查：
 
 ### RSS 源抓取失败
 
-单个 RSS 源失败不会中断整个任务，程序会打印警告并继续处理其他新闻源。若所有源都失败或没有近 24 小时新闻，本次会跳过推送。
+单个 RSS 源失败不会中断整个任务，程序会打印警告并继续处理其他新闻源。若所有源都失败，本次以非零退出码失败；若至少一个源成功但没有近 48 小时的有效新闻，则正常跳过推送。
+
+已移除新华网 2022 年旧 RSS、财新停更 RSS 及本次检查返回 404 或非 RSS 页面的一批旧地址，使用中新网、IT之家及 Dezeen 官方 Feed 补充。外部源可能随时变更，程序仅接纳能解析出有效发布时间的条目。
+
+### AI 简报为空或未完成
+
+只有 `finish_reason=stop`、正文非空且包含要闻速览和新闻原文链接时才会发送。达到输出上限、被过滤或格式不完整时，程序会取消发送并返回非零退出码，让 Actions 显示失败。检查日志后重新触发任务。
 
 ## 技术栈
 
 - Node.js 20
 - `rss-parser`：RSS 抓取
+- `markdown-it`：安全的 Markdown 渲染，禁用原始 HTML 与图片
 - `openai`：调用 DeepSeek 兼容 OpenAI 的 Chat Completions API
 - `opencc-js`：繁体转简体
 - `nodemailer`：邮件发送

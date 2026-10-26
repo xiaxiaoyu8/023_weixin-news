@@ -2,7 +2,7 @@ name: 每日新闻推送
 
 on:
   schedule:
-    # UTC 21:30 = 北京时间 5:30
+    # UTC 21:30 = 次日北京时间 05:30
     - cron: "30 21 * * *"
   workflow_dispatch: # 允许手动触发
 
@@ -21,8 +21,11 @@ jobs:
 
       - run: npm ci
 
+      - run: npm test
+
       - run: node src/index.js
         env:
+          TZ: Asia/Shanghai
           QQ_EMAIL: ${{ secrets.QQ_EMAIL }}
           QQ_SMTP_CODE: ${{ secrets.QQ_SMTP_CODE }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}

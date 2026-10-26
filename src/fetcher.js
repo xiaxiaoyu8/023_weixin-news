@@ -1,5 +1,6 @@
 const RssParser = require("rss-parser");
 const { toSimplified } = require("./chinese");
+const { getNewsWindow } = require("./time");
 
 const parser = new RssParser();
 const FEED_TIMEOUT_MS = 12000;
@@ -15,55 +16,40 @@ const FEEDS = [
   { name: "纽约时报中文", url: "https://cn.nytimes.com/rss/", category: "国际" },
   { name: "半岛电视台中文", url: "https://chinese.aljazeera.net/rss", category: "国际" },
   { name: "新加坡 CNA", url: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml", category: "国际" },
+  { name: "中新网国际", url: "https://www.chinanews.com.cn/rss/world.xml", category: "国际" },
 
   // ===== 科技 =====
-  { name: "36氪", url: "https://36kr.com/feed", category: "科技" },
+  { name: "IT之家", url: "https://www.ithome.com/rss/", category: "科技" },
   { name: "Solidot", url: "https://www.solidot.org/index.rss", category: "科技" },
-  { name: "TechCrunch 中国", url: "https://techcrunch.cn/feed/", category: "科技" },
   { name: "爱范儿", url: "https://www.ifanr.com/feed", category: "科技" },
   { name: "少数派", url: "https://sspai.com/feed", category: "科技" },
   { name: "极客公园", url: "https://www.geekpark.net/rss", category: "科技" },
-  { name: "机器之心", url: "https://www.jiqizhixin.com/rss", category: "科技" },
-  { name: "虎嗅", url: "https://www.huxiu.com/rss/0.xml", category: "科技" },
-  { name: "Engadget 中文", url: "https://chinese.engadget.com/rss.xml", category: "科技" },
-  { name: "cnBeta", url: "https://www.cnbeta.com/backend.php", category: "科技" },
 
   // ===== 财经 =====
-  { name: "华尔街见闻", url: "https://wallstreetcn.com/feed", category: "财经" },
+  { name: "中新网财经", url: "https://www.chinanews.com.cn/rss/finance.xml", category: "财经" },
   { name: "第一财经", url: "https://plink.anyfeeder.com/weixin/CBNweekly2008", category: "财经" },
   { name: "21世纪经济报道", url: "https://plink.anyfeeder.com/weixin/jjbd21", category: "财经" },
-  { name: "财经杂志", url: "http://www.caijing.com.cn/rss/110827686.xml", category: "财经" },
-  { name: "财新网", url: "http://china.caixin.com/news/rss/100300241.xml", category: "财经" },
-  { name: "雪球", url: "https://xueqiu.com/hots/rss", category: "财经" },
-  { name: "智通财经", url: "https://www.zhitongcaijing.com/rss.xml", category: "财经" },
 
   // ===== 国内 =====
-  { name: "联合早报", url: "https://www.zaobao.com/news/china/rss.xml", category: "国内" },
-  { name: "新京报", url: "http://www.bjnews.com.cn/feed", category: "国内" },
+  { name: "中新网国内", url: "https://www.chinanews.com.cn/rss/china.xml", category: "国内" },
   { name: "南方周末", url: "https://feedx.net/rss/infzm.xml", category: "国内" },
-  { name: "人民网", url: "https://www.people.com.cn/rss/politics.xml", category: "国内" },
-  { name: "新华网", url: "http://www.xinhuanet.com/politics/news_politics.xml", category: "国内" },
-  { name: "凤凰新闻", url: "https://news.ifeng.com/rss/index.xml", category: "国内" },
 
   // ===== 文化 =====
-  { name: "三联生活周刊", url: "http://feedmaker.kindle4rss.com/feeds/lifeweek.weixin.xml", category: "文化" },
+  { name: "中新网文娱", url: "https://www.chinanews.com.cn/rss/ent.xml", category: "文化" },
   { name: "豆瓣读书", url: "https://www.douban.com/feed/review/book", category: "文化" },
 
   // ===== 学术 =====
   { name: "arxiv CS", url: "https://rss.arxiv.org/rss/cs", category: "学术" },
   { name: "阮一峰的网络日志", url: "http://www.ruanyifeng.com/blog/atom.xml", category: "学术" },
-  { name: "Matrix67", url: "http://www.matrix67.com/blog/feed", category: "学术" },
 
   // ===== 设计 & 创意 =====
-  { name: "优设", url: "https://www.uisdc.com/feed", category: "设计" },
-  { name: "Dezeen 中文", url: "https://www.dezeen.com/cn/rss", category: "设计" },
+  { name: "Dezeen", url: "https://www.dezeen.com/feed/", category: "设计" },
 ];
 
-function isWithin24h(pubDate) {
-  if (!pubDate) return true; // keep if no date
-  const then = new Date(pubDate).getTime();
-  if (isNaN(then)) return true;
-  return Date.now() - then < 24 * 60 * 60 * 1000;
+function isWithinWindow(pubDate, { start, end }) {
+  if (!pubDate) return false;
+  const timestamp = new Date(pubDate).getTime();
+  return Number.isFinite(timestamp) && timestamp >= start.getTime() && timestamp <= end.getTime();
 }
 
 async function fetchFeedXml(url) {
@@ -92,18 +78,19 @@ async function fetchFeedXml(url) {
   }
 }
 
-async function fetchFeed(feed) {
+async function fetchFeed(feed, window) {
   try {
     const xml = await fetchFeedXml(feed.url);
     const result = await parser.parseString(xml);
     const items = (result.items || [])
-      .filter((item) => isWithin24h(item.pubDate || item.isoDate))
+      .filter((item) => isWithinWindow(item.isoDate || item.pubDate, window))
+      .sort((a, b) => new Date(b.isoDate || b.pubDate) - new Date(a.isoDate || a.pubDate))
       .slice(0, MAX_ITEMS_PER_FEED)
       .map((item) => ({
         title: toSimplified((item.title || "").trim()),
         link: item.link || "",
         summary: toSimplified((item.contentSnippet || item.summary || "").trim()).slice(0, 200),
-        pubDate: item.pubDate || item.isoDate || "",
+        pubDate: new Date(item.isoDate || item.pubDate).toISOString(),
         sourceName: toSimplified(feed.name),
         category: toSimplified(feed.category),
       }));
@@ -111,14 +98,19 @@ async function fetchFeed(feed) {
     return items;
   } catch (err) {
     console.warn(`  [${feed.name}] 抓取失败: ${err.message}`);
-    return [];
+    return null;
   }
 }
 
-async function fetchAllNews() {
+async function fetchAllNews({ now = new Date() } = {}) {
   console.log("📡 抓取新闻...");
-  const results = await Promise.all(FEEDS.map(fetchFeed));
-  const all = results.flat();
+  const window = getNewsWindow(now);
+  const results = await Promise.all(FEEDS.map((feed) => fetchFeed(feed, window)));
+  const successful = results.filter((items) => items !== null);
+  if (successful.length === 0) {
+    throw new Error("所有 RSS 新闻源均抓取失败");
+  }
+  const all = successful.flat();
 
   // dedup by URL
   const seen = new Set();

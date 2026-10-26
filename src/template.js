@@ -1,44 +1,93 @@
-function buildHtml(markdownBody) {
-  const date = new Date().toLocaleDateString("zh-CN", {
+const MarkdownIt = require("markdown-it");
+const { TIME_ZONE, getNewsWindow } = require("./time");
+
+const markdown = new MarkdownIt({ html: false }).disable("image");
+const styles = {
+  heading_open: "margin:30px 0 12px;padding-bottom:10px;border-bottom:1px solid #e3e9ee;color:#182d43;font-size:19px;line-height:1.5;font-weight:700;",
+  paragraph_open: "margin:10px 0;color:#35485b;line-height:1.9;",
+  bullet_list_open: "list-style:none;margin:0;padding:0;",
+  ordered_list_open: "margin:0;padding-left:24px;",
+  list_item_open: "margin:0;padding:16px 0;border-bottom:1px solid #edf0f3;line-height:1.9;overflow-wrap:anywhere;word-break:break-word;",
+  blockquote_open: "margin:14px 0 24px;padding:10px 18px;background:#f0f7f7;border-left:3px solid #287d7b;border-radius:0 8px 8px 0;",
+  strong_open: "color:#182d43;font-weight:700;",
+  link_open: "display:inline-block;max-width:100%;color:#176c8a;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere;word-break:break-word;",
+};
+
+for (const [rule, style] of Object.entries(styles)) {
+  markdown.renderer.rules[rule] = (tokens, index, options, env, renderer) => {
+    tokens[index].attrSet("style", style);
+    return renderer.renderToken(tokens, index, options);
+  };
+}
+
+markdown.renderer.rules.code_inline = (tokens, index) =>
+  `<span style="display:inline-block;padding:1px 7px;background:#f1f4f7;border-radius:4px;color:#536579;font-size:12px;line-height:1.7;">${markdown.utils.escapeHtml(tokens[index].content)}</span>`;
+
+function buildHtml(markdownBody, { now = new Date() } = {}) {
+  const date = now.toLocaleDateString("zh-CN", {
+    timeZone: TIME_ZONE,
     year: "numeric",
     month: "long",
     day: "numeric",
     weekday: "long",
   });
-
-  // simple markdown-to-HTML conversion
-  const htmlBody = markdownBody
-    .replace(/^### (.+)/gm, '<h3 style="margin:16px 0 8px;font-size:15px;color:#333;">$1</h3>')
-    .replace(/^## (.+)/gm, '<h2 style="margin:20px 0 10px;font-size:17px;color:#1a1a1a;border-bottom:1px solid #eee;padding-bottom:6px;">$1</h2>')
-    .replace(/^# (.+)/gm, '<h1 style="margin:0 0 16px;font-size:20px;color:#111;">$1</h1>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:#1a73e8;text-decoration:none;">$1</a>')
-    .replace(/\n\n/g, "</p><p style='margin:4px 0;'>")
-    .replace(/\n/g, "<br>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/`(.+?)`/g, '<span style="color:#999;font-size:12px;">$1</span>');
+  const { start, end } = getNewsWindow(now);
+  const format = (value) => value.toLocaleString("zh-CN", {
+    timeZone: TIME_ZONE,
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const htmlBody = markdown.render(markdownBody);
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>每日新闻简报</title>
+<meta name="color-scheme" content="light">
+<title>${date} · 晨间简报</title>
+<style>
+@media screen and (max-width:480px) {
+  .header { padding:24px 20px !important; }
+  .content { padding:4px 20px 24px !important; }
+  .period { padding:14px 20px !important; }
+}
+</style>
 </head>
-<body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#fff;">
+<body style="margin:0;padding:0;background:#f1f4f8;color:#35485b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',Arial,sans-serif;">
+<div style="display:none;max-height:0;overflow:hidden;">${date}，最近48小时新闻精选与要闻速览。</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f4f8;">
   <tr>
-    <td style="padding:24px 20px 12px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;text-align:center;border-radius:0 0 12px 12px;">
-    <h1 style="margin:0;font-size:18px;opacity:0.95;">早安，简报新鲜出炉!</h1>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:16px 20px 24px;font-size:14px;line-height:1.8;color:#333;">
-      <p style='margin:4px 0;'>${htmlBody}</p>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:12px 20px;border-top:1px solid #eee;text-align:center;font-size:11px;color:#999;">
-      由 AI 自动生成 · 每日 7:30 推送 · <a href="https://github.com" style="color:#999;">GitHub Actions</a>
+    <td align="center" style="padding:24px 12px;">
+      <table role="presentation" width="680" cellpadding="0" cellspacing="0" style="width:100%;max-width:680px;background:#fff;border:1px solid #e1e7ee;border-radius:14px;overflow:hidden;">
+        <tr><td style="height:5px;background:#287d7b;font-size:0;line-height:0;">&nbsp;</td></tr>
+        <tr>
+          <td class="header" style="padding:30px 32px 26px;">
+            <p style="margin:0 0 10px;color:#287d7b;font-size:12px;font-weight:700;letter-spacing:2px;">每日新闻 · 早间阅读</p>
+            <h1 style="margin:0 0 12px;color:#182d43;font-size:32px;font-weight:750;line-height:1.25;letter-spacing:1px;">晨间简报</h1>
+            <p style="margin:0;color:#536579;font-size:14px;line-height:1.7;">${date}</p>
+          </td>
+        </tr>
+        <tr>
+          <td class="period" style="padding:14px 32px;background:#f7f9fb;border-top:1px solid #edf0f3;border-bottom:1px solid #edf0f3;">
+            <p style="margin:0 0 3px;color:#182d43;font-size:13px;font-weight:700;">最近48小时 · 新闻精选</p>
+            <p style="margin:0;color:#536579;font-size:12px;line-height:1.7;">${format(start)} — ${format(end)}（北京时间）</p>
+          </td>
+        </tr>
+        <tr>
+          <td class="content" style="padding:4px 32px 30px;font-size:16px;line-height:1.9;overflow-wrap:anywhere;word-break:break-word;">
+            ${htmlBody}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px;border-top:1px solid #e3e9ee;background:#fafbfc;text-align:center;">
+            <p style="margin:0 0 5px;color:#536579;font-size:12px;line-height:1.8;">每天 05:30 · 最近新闻精选</p>
+          </td>
+        </tr>
+      </table>
     </td>
   </tr>
 </table>
